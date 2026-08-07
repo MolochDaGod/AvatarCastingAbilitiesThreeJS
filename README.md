@@ -5,9 +5,10 @@ An Avatar-inspired elemental bending sandbox built with **Three.js**, **Vite** a
 ability travels that spline and detonates at the end. Every visual parameter is editable at
 runtime through an in-game VFX editor, and the settings can be saved as presets.
 
-The same gesture has a second meaning. Switch to **walk mode** and the drawn path is not cast but
-*ridden*: the avatar leaps onto the head of the stroke, folds into the meditation pose on a
-spinning ball of air and rides the path to its end, banking into every turn.
+The same gesture has a second meaning. Switch to **walk mode** (**M**) and the drawn path is not
+cast but *ridden* on a **windsurfer**: the avatar leaps onto the board, **IK plants both feet on
+the deck straps** and **both hands on the metal boom**, then rides the path banking into turns.
+An air-cushion VFX still sits under the board (Avatar wind-ball look) — it is not the seat.
 
 ---
 
@@ -22,6 +23,31 @@ npm run dev
 ```
 
 Then open the URL Vite prints (default <http://127.0.0.1:5173>).
+
+### Grudge Warlords / Toon RTS verify
+
+Load a **Toon RTS grudge6** race kit from the fleet CDN (SI meters, Bip001):
+
+```
+http://127.0.0.1:5173/?race=human
+http://127.0.0.1:5173/?race=elf
+http://127.0.0.1:5173/?toon=1
+```
+
+Races: `human` | `barbarian` | `elf` | `orc` | `undead` | `dwarf`  
+CDN kits: `assets.grudge-studio.com/asset-packs/toon-rts-characters/glb/characters/{race}.glb`
+
+HUD element cards use framed Warlords icons from  
+`https://assets.grudge-studio.com/icons/hud/` (catalog: `/api/v1/warlords-hud-icons.json`).
+
+| Key | Element | Icon (cast feel) | Best effect check |
+|-----|---------|------------------|-------------------|
+| 1 | Fire | attack.png | fireball path + impact |
+| 2 | Water | pray.png | heal/channel cool cast |
+| 3 | Earth | siege.png | ground slam / aura |
+| 4 | Wind | scout.png | bolt / beam flight |
+
+Live Vercel: [casting-abilities-threejs.vercel.app](https://casting-abilities-threejs.vercel.app/) — append `?race=human` after deploy.
 
 ```bash
 npm run build
@@ -73,14 +99,14 @@ Left mouse is reserved for drawing, which is why orbiting is bound to the right 
 ```
 src/
   abilities/      Ability base class, the four elements, the pooling manager
-  animation/      FBX character loading, material conversion, AnimationMixer,
-                  procedural cross-legged meditation pose (SittingPose.js),
-                  walk mode's leap → ride → dismount sequence (WalkController.js)
+  animation/      FBX/Toon character loading, AnimationMixer, SittingPose.js,
+                  WindSurferIK.js (hands→boom, feet→deck), WalkController.js
   assets/         Procedural geometry generators (rocks, ground plates, tower, shards)
   config/         settings.js — the single source of truth for every parameter
   core/           App, Renderer, CameraRig, Time, Layers, shared frame uniforms
   effects/        Ribbon builder, cast trail, decals, bursts, lights, shake, flash,
-                  the air scooter the avatar rides in walk mode (AirScooter.js)
+                  WindSurfer.js (board/mast/boom/sail + IK sockets),
+                  AirScooter.js (wind cushion under the board)
   input/          InputManager (events) and PathDrawer (raycast → spline)
   loaders/        AssetLoader with a shared LoadingManager
   materials/      Fire volume / Ocean water / Wind / Rock / Trail / Distortion /
@@ -126,7 +152,7 @@ The path is always drawn on the ground, but an element does not have to crawl al
 `Ability.pathHeight(u)` lifts the trajectory, and the head, the trailing window, the dynamic
 light and every particle emission point follow it together. Fire overrides it to fly.
 
-### Walk mode: the same stroke, ridden
+### Walk mode: the same stroke, ridden on a windsurfer
 
 `settings.mode` decides what a finished stroke means. In `'casting'` it goes to `AbilityManager`;
 in `'walk'` it goes to `WalkController`, which runs a four-phase sequence over the curve
@@ -134,33 +160,32 @@ in `'walk'` it goes to `WalkController`, which runs a four-phase sequence over t
 
 | Phase | What happens |
 | --- | --- |
-| `leap` | A parabolic arc from wherever he stands to the head of the path. He turns in the air onto the path's own heading, and at `walk.tuck` of the way through he starts folding into the meditation pose so he arrives already seated. |
-| `ride` | The air ball puffs into existence under him. He follows the curve **by arc length** at `walk.speed` m/s, easing up over `walk.accel` and gliding to a stop over the last `walk.brake` seconds' worth of path. |
-| `dismount` | The ball blows apart, he steps off forward and settles onto the floor. |
-| `idle` | Placement is handed straight back to the idle clip. |
+| `leap` | Parabolic arc to the path head. At `walk.tuck` the **IK weight** ramps so hands/feet start seeking the board sockets before landing. |
+| `ride` | **WindSurfer** spawns (board + mast + **metal boom** + sail). Rider stands on deck; each frame after the mixer, `WindSurferIK` plants **feet on deck straps** and **hands on boom grips**. Path follow by arc length; board banks with lean. |
+| `dismount` | IK blends off, board fades, he steps forward onto the floor. |
+| `idle` | Placement back to the idle clip. |
 
-Banking is derived, not authored: the controller tracks how fast the heading is actually swinging
-and rolls the body about its own forward axis in proportion, so tight corners lean hard and
-straights run level. The roll lives on a `tilt` joint underneath the character root, which keeps it
-from fighting the heading for the same rotation.
+**IK sockets** (SI, tunable under `settings.walk.windsurf`):
 
-Drawing a new path mid-ride is allowed — he simply leaps off whatever he is doing onto the head of
-the new one. `walk.returnHome` makes him hop back to where the whole thing started once the path is
-finished; by default he stays at the far end.
+| Socket | Placement |
+| --- | --- |
+| `footL` / `footR` | Deck foot straps (rear / front along board +Z) |
+| `handL` / `handR` | Left/right grips on the boom metal bar |
+| `boomMid` | Boom centre (torso lean toward sail) |
 
-### The air scooter
+Bones: Mixamo (`LeftArm`…) **or** grudge6 Bip001 (`Bip001 L UpperArm`…). Apply order is hard:
 
-`windball.jpg` (an air scooter, from the show) is the reference, not an asset: the ball is a shader
-sphere, not a texture. `AirScooterMaterial` partitions the sphere into `walk.bands` streamlines of
-constant *longitude + twist × latitude* — the family of curves that spirals from one pole to the
-other — and draws one strand per lane, warped by an fbm field so the strands weave and break up
-instead of reading as a wireframe globe. The pattern rotates about the mesh's local Y axis, which
-`AirScooter` aligns with the rider's side vector, so the swirl rolls the way the ball rolls. On the
-dark stage the arcs come out as the bright part under additive blending, which is the standard
-translation of a light-on-light reference.
+```
+walk.update → character.update (mixer) → walk.applyRiderIk
+```
 
-Keep `walk.bands` on whole numbers: the longitude coordinate wraps at ±π, so a fractional band
-count leaves a visible seam down one side.
+Banking rolls the `tilt` joint under the character root (and banks the board). Drawing a new path
+mid-ride leaps onto the new head. `walk.returnHome` hops back to start when finished.
+
+### Wind cushion under the board
+
+The old Avatar **air scooter** ball is kept as a **wind cushion** under the deck (`AirScooter` +
+`AirScooterMaterial`), not as the seat. Streamline tuning still uses `walk.bands` / `walk.spin` etc.
 
 ### Fire is a raymarched volume
 

@@ -19,9 +19,9 @@ export const settings = {
   /* ------------------------------------------------------------------ */
   /**
    * 'casting' — the stroke becomes an elemental ability (the original mode).
-   * 'walk'    — the avatar leaps onto the head of the stroke, drops into the
-   *             meditation pose on an air scooter and rides the path to its
-   *             end. See animation/WalkController.js.
+   * 'walk'    — the avatar leaps onto a windsurfer at the head of the stroke,
+   *             plants feet on the deck and hands on the boom (IK), and rides
+   *             the path. See animation/WalkController.js + WindSurferIK.js.
    */
   mode: 'casting',
 
@@ -102,7 +102,7 @@ export const settings = {
   },
 
   /* ------------------------------------------------------------------ */
-  /* Walk mode — the leap, the air scooter and the ride                  */
+  /* Walk mode — leap, windsurfer board + boom IK, ride                  */
   /* ------------------------------------------------------------------ */
   walk: {
     /* --- the leap onto the head of the path --- */
@@ -110,36 +110,59 @@ export const settings = {
     jumpHeight: 1.75, // apex of the arc above the straight line
     jumpMin: 0.45, // seconds — floor and ceiling on the leap duration, so a
     jumpMax: 1.15, //           step and a long dive both read as one jump
-    tuck: 0.62, // fraction of the leap at which the legs fold up
-    poseBlend: 0.45, // seconds to fold into / out of the seated pose
+    tuck: 0.55, // fraction of the leap when hands/feet start blending onto board
+    poseBlend: 0.45, // seconds for idle pose blend around the ride
 
     /* --- riding the path --- */
     speed: 5.0, // metres/second along the drawn path
     accel: 0.45, // seconds spent easing up to speed after landing
     brake: 0.6, // seconds of gliding to a stop at the far end
-    dismountTime: 0.55, // seconds to step off the ball
+    dismountTime: 0.55, // seconds to step off the board
     returnHome: false, // leap back to where he started once the path is ridden
 
     /* --- how he rides --- */
-    hover: 0.06, // gap between the ball and the floor
-    seatSink: 0.34, // how deep the seat sits into the ball, × radius
-    bob: 0.035, // vertical bounce while riding, metres
-    bobRate: 2.3, // bounces per second
-    lean: 26, // degrees of bank at a full-rate turn
+    hover: 0.06, // gap between board underside and the floor
+    seatSink: 0.34, // kept for air-cushion VFX scale under the board
+    bob: 0.028, // vertical bounce while riding, metres
+    bobRate: 2.0, // bounces per second
+    lean: 22, // degrees of bank at a full-rate turn
     leanRate: 2.0, // radians/second of yaw that counts as a full-rate turn
     leanDamping: 0.004, // how quickly the bank follows the turn (damp rate)
     turnDamping: 0.0001, // how quickly the body swings onto the new heading
 
-    /* --- the air ball itself (see materials/AirScooterMaterial.js) --- */
-    radius: 0.46,
-    squash: 0.11, // how much the ball flattens under the rider
-    spin: 1.6, // surface swirl, revolutions/second
-    bands: 7.0, // streamlines wrapped around the ball
-    twist: 2.4, // how far those streamlines wind from pole to pole
-    filamentSharp: 0.62, // 0 = soft sheets, 1 = hairline strands
-    turbulence: 0.5, // how far the noise drags the streamlines around
-    haze: 0.5, // milky vapour filling the gaps between them
-    wobble: 0.08, // silhouette breathing
+    /* --- windsurfer vehicle (SI metres) + IK grip layout --- */
+    windsurf: {
+      boardLength: 2.8,
+      boardWidth: 0.72,
+      boardThickness: 0.12,
+      mastHeight: 3.5,
+      mastOffsetX: 0.18, // mast windward of centreline
+      boomLength: 1.55, // metal bar length
+      boomHeight: 1.12, // deck → boom grip height (hands)
+      boomRadius: 0.028,
+      // Deck foot straps (local board: +Z = nose / path forward)
+      footL_z: -0.38, // rear foot
+      footR_z: 0.32, // front foot
+      footSpreadX: 0.14, // half-width of stance on deck
+      // Boom hand grips (world sockets follow metal bar)
+      handL_z: -0.42, // rear hand (aft on boom)
+      handR_z: 0.28, // front hand (toward mast / nose)
+      handLift: 0.02, // sit palms slightly above boom centreline
+      hipDrop: 0.1, // soft pelvis drop so knees bend into straps
+      spineLeanDeg: 14, // torso lean toward boom
+      ikBlend: 0.32 // seconds to full hands+feet plant
+    },
+
+    /* --- air cushion under the board (AirScooter VFX, not the seat) --- */
+    radius: 0.38,
+    squash: 0.14,
+    spin: 1.6,
+    bands: 7.0,
+    twist: 2.4,
+    filamentSharp: 0.62,
+    turbulence: 0.5,
+    haze: 0.5,
+    wobble: 0.08,
     fresnel: 1.5,
     opacity: 1.0,
     glow: 1.35,
@@ -147,13 +170,13 @@ export const settings = {
     colorOuter: '#5cc8ee',
 
     /* --- debris, light and impacts --- */
-    dustRate: 240, // dust shed under the ball, particles/second
-    dustSize: 0.18,
-    dustLifetime: 0.85,
-    lightIntensity: 6,
+    dustRate: 200,
+    dustSize: 0.16,
+    dustLifetime: 0.8,
+    lightIntensity: 5.5,
     lightRadius: 7,
     lightColor: '#bfe8ff',
-    landShake: 0.35 // camera kick on landing and dismount
+    landShake: 0.35
   },
 
   /* ------------------------------------------------------------------ */

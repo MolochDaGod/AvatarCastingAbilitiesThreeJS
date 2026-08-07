@@ -1,6 +1,19 @@
 import { ELEMENTS, ELEMENT_META, MODES, MODE_META } from '../config/settings.js';
 import { ELEMENT_SIGILS } from './glyphs.js';
 
+/** Warlords framed HUD icons (CDN) — map elements to cast / upgrade slots */
+const CDN_ICON = 'https://assets.grudge-studio.com/icons/hud';
+const ELEMENT_ICON = {
+  fire: `${CDN_ICON}/attack.png`,
+  water: `${CDN_ICON}/pray.png`,
+  earth: `${CDN_ICON}/siege.png`,
+  wind: `${CDN_ICON}/scout.png`,
+};
+const MODE_ICON = {
+  casting: `${CDN_ICON}/skill-vfx-lab.png`,
+  walk: `${CDN_ICON}/move.png`,
+};
+
 /**
  * Heads-up display: mode switch, element selector, controls, live stats and
  * toasts.
@@ -47,9 +60,11 @@ export class HUD {
       <div class="hud__modes">
         ${MODES.map((mode) => {
           const meta = MODE_META[mode];
+          const icon = MODE_ICON[mode];
           return `
             <div class="mode-card" data-mode="${mode}">
-              <span class="mode-card__glyph">${meta.glyph}</span>${meta.label}
+              ${icon ? `<img class="mode-card__icon" src="${icon}" alt="" width="28" height="28" />` : `<span class="mode-card__glyph">${meta.glyph}</span>`}
+              ${meta.label}
             </div>`;
         }).join('')}
         <span class="hud__modes-key">M</span>
@@ -58,10 +73,13 @@ export class HUD {
       <div class="hud__elements">
         ${ELEMENTS.map((element, index) => {
           const meta = ELEMENT_META[element];
+          const icon = ELEMENT_ICON[element];
           return `
             <div class="element-card" data-element="${element}" style="--accent:${meta.accent}">
               <div class="element-card__key">${index + 1}</div>
-              <div class="element-card__glyph">${ELEMENT_SIGILS[element] ?? meta.glyph}</div>
+              ${icon
+                ? `<img class="element-card__icon" src="${icon}" alt="${meta.label}" width="48" height="48" />`
+                : `<div class="element-card__glyph">${ELEMENT_SIGILS[element] ?? meta.glyph}</div>`}
               <div class="element-card__label">${meta.label}</div>
             </div>`;
         }).join('')}

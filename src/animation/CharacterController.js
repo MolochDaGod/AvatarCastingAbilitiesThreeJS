@@ -12,7 +12,7 @@ import {
   Vector3
 } from 'three';
 import { settings } from '../config/settings.js';
-import { LAYER } from '../core/Layers.js';
+import { LAYER, setLayerRecursive } from '../core/Layers.js';
 import { disposeObject } from '../utils/dispose.js';
 import { SittingPose } from './SittingPose.js';
 
@@ -23,6 +23,33 @@ const CHARACTER_TEXTURE_URL = './angtexture.png';
 const FBX_SCALE = 0.01;
 /** Rigs vary; normalise to a believable human height so the world scale holds. */
 const TARGET_HEIGHT = 1.78;
+
+/**
+ * Optional Toon RTS / grudge6 race kit (SI meters already).
+ * Enable with ?race=human|barbarian|elf|orc|undead|dwarf or ?toon=1
+ * CDN SSOT: assets.grudge-studio.com asset-packs/toon-rts-characters
+ */
+const TOON_RACE_URL = {
+  human: 'https://assets.grudge-studio.com/asset-packs/toon-rts-characters/glb/characters/human.glb',
+  barbarian:
+    'https://assets.grudge-studio.com/asset-packs/toon-rts-characters/glb/characters/barbarian.glb',
+  elf: 'https://assets.grudge-studio.com/asset-packs/toon-rts-characters/glb/characters/elf.glb',
+  orc: 'https://assets.grudge-studio.com/asset-packs/toon-rts-characters/glb/characters/orc.glb',
+  undead: 'https://assets.grudge-studio.com/asset-packs/toon-rts-characters/glb/characters/undead.glb',
+  dwarf: 'https://assets.grudge-studio.com/asset-packs/toon-rts-characters/glb/characters/dwarf.glb',
+};
+
+function resolveCharacterUrl() {
+  try {
+    const q = new URLSearchParams(window.location.search);
+    const race = (q.get('race') || (q.get('toon') === '1' ? 'human' : '')).toLowerCase();
+    if (race && TOON_RACE_URL[race]) return { kind: 'gltf', url: TOON_RACE_URL[race], race };
+    if (q.get('kit')) return { kind: 'gltf', url: q.get('kit'), race: 'custom' };
+  } catch {
+    /* SSR / offline */
+  }
+  return { kind: 'fbx', url: CHARACTER_URL, race: null };
+}
 
 /**
  * Loads the rigged FBX, normalises it for the scene and drives its animation.
@@ -68,6 +95,53 @@ export class CharacterController {
    * @param {import('../loaders/AssetLoader.js').AssetLoader} assets
    */
   async load(assets) {
+    const source = resolveCharacterUrl();
+    this.sourceKind = source.kind;
+    this.raceId = source.race;
+
+    if (source.kind === 'gltf' && typeof assets.loadGLTF === 'function') {
+      try {
+        const gltf = await assets.loadGLTF(source.url);
+        await assets.settled();
+        const model = gltf.scene || gltf.scenes?.[0];
+        if (!model) throw new Error('empty gltf');
+        // Toon RTS kits are already SI meters; fit height only.
+        model.updateMatrixWorld(true);
+        const box = new Box3().setFromObject(model);
+        const size = new Vector3();
+        box.getSize(size);
+        const h = size.y || TARGET_HEIGHT;
+        const s = TARGET_HEIGHT / h;
+        model.scale.multiplyScalar(s);
+        model.traverse((o) => {
+          if (o.isMesh || o.isSkinnedMesh) {
+            o.castShadow = true;
+            o.receiveShadow = true;
+          }
+        });
+        setLayerRecursive(model, LAYER.WORLD);
+        this.tilt.add(model);
+        this.model = model;
+        this.height = TARGET_HEIGHT;
+        this.headPosition.set(0, TARGET_HEIGHT * 0.92, 0);
+        // Prefer embedded idle if present
+        if (gltf.animations?.length) {
+          this.mixer = new AnimationMixer(model);
+          const clip = gltf.animations[0];
+          const action = this.mixer.clipAction(clip);
+          action.setLoop(LoopRepeat, Infinity);
+          action.play();
+          this.actions.set('idle', action);
+          this.current = action;
+        }
+        this.sitting = null;
+        console.info(`[Character] Toon RTS loaded race=${source.race} url=${source.url}`);
+        return;
+      } catch (err) {
+        console.warn('[Character] Toon RTS load failed, falling back to FBX', err);
+      }
+    }
+
     const [fbx, albedo] = await Promise.all([
       assets.loadFBX(CHARACTER_URL),
       assets.loadTexture(CHARACTER_TEXTURE_URL)

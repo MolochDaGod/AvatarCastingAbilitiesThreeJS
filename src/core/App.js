@@ -239,6 +239,8 @@ export class App {
 
     this.loading.setProgress(0.5, 'Loading character…');
     await this.character.load(assets);
+    // Bind windsurfer hand/foot IK to the loaded rig (Mixamo or Bip001).
+    this.walk.bindCharacter();
 
     this.loading.setProgress(0.85, 'Compiling shaders…');
     // Compile everything up front so the first cast never stutters.
@@ -288,9 +290,10 @@ export class App {
 
     this.environment.setFocus(this.character.position.x, this.character.position.z);
     this.environment.update();
-    // Walk mode places the character; the controller then animates him there.
+    // Walk mode places board + rider; mixer runs next; IK plants hands/feet last.
     this.walk.update(dt);
     this.character.update(dt);
+    this.walk.applyRiderIk(dt);
 
     this.ground.update(this.elapsed);
     this.dust.update(this.elapsed, this.character.position);
