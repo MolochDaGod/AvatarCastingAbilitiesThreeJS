@@ -5,6 +5,8 @@ An Avatar-inspired elemental bending sandbox built with **Three.js**, **Vite** a
 ability travels that spline and detonates at the end. Every visual parameter is editable at
 runtime through an in-game VFX editor, and the settings can be saved as presets.
 
+**GitHub:** <https://github.com/MolochDaGod/LinearAbiltyCastingThreeJS.git>
+
 The same gesture has a second meaning. Switch to **walk mode** (**M**) and the drawn path is not
 cast but *ridden* on a **windsurfer**: the avatar leaps onto the board, **IK plants both feet on
 the deck straps** and **both hands on the metal boom**, then rides the path banking into turns.
