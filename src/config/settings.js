@@ -108,7 +108,12 @@ export const settings = {
     /* --- third-person movement (WASD / arrows) --- */
     move: {
       speed: 3.2, // metres/second walking speed
-      turnDamping: 0.0008 // how quickly the body rotates toward move direction
+      acceleration: 12, // metres/second² to reach target speed
+      deceleration: 10, // metres/second² to slow to a stop
+      rotationSpeed: 10, // slerp rate for facing (higher = snappier turns)
+      jumpHeight: 8, // initial upward velocity, metres/second
+      gravity: -25, // metres/second²
+      maxJumps: 1 // 1 = single jump, 2 = double jump
     },
 
     /* --- the leap onto the head of the path --- */

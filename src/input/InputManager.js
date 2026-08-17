@@ -116,6 +116,7 @@ export class InputManager extends EventEmitter {
           this._lastSpaceTime = 0; // reset so a triple-tap doesn't re-fire
         } else {
           this._lastSpaceTime = now;
+          this.emit('action', 'jump');
         }
         break;
       }

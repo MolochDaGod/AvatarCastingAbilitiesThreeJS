@@ -195,6 +195,12 @@ export class App {
           if (!this.walk.triggerWindsurf()) this.hud.showToast('Cannot mount board');
         }
         break;
+      case 'jump':
+        // Single Space tap: jump in walk mode
+        if (settings.mode === 'walk' && !this.walk.active) {
+          this.thirdPerson.jump();
+        }
+        break;
       default:
         break;
     }
