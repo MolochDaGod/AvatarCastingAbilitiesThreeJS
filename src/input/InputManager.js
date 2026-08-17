@@ -17,6 +17,10 @@ export class InputManager extends EventEmitter {
     this.keys = new Set();
     this.enabled = true;
 
+    // Double-tap detection (Space → windsurf mount)
+    this._lastSpaceTime = 0;
+    this._doubleTapWindow = 0.32; // seconds
+
     this._bind();
   }
 
@@ -105,6 +109,16 @@ export class InputManager extends EventEmitter {
       case 'KeyM':
         this.emit('action', 'toggleMode');
         break;
+      case 'Space': {
+        const now = performance.now() / 1000;
+        if (now - this._lastSpaceTime < this._doubleTapWindow) {
+          this.emit('action', 'windsurf');
+          this._lastSpaceTime = 0; // reset so a triple-tap doesn't re-fire
+        } else {
+          this._lastSpaceTime = now;
+        }
+        break;
+      }
       default:
         break;
     }

@@ -13,6 +13,7 @@ import { ContactShadows } from '../world/ContactShadows.js';
 import { AssetLoader } from '../loaders/AssetLoader.js';
 import { CharacterController } from '../animation/CharacterController.js';
 import { WalkController } from '../animation/WalkController.js';
+import { ThirdPersonController } from '../animation/ThirdPersonController.js';
 
 import { InputManager } from '../input/InputManager.js';
 import { PathDrawer } from '../input/PathDrawer.js';
@@ -99,6 +100,9 @@ export class App {
       shake: this.shake
     });
 
+    // Third-person WASD movement (walk mode only)
+    this.thirdPerson = new ThirdPersonController(this.character, this.camera);
+
     /* ---- input ---- */
     this.input = new InputManager(canvas);
     this.pathDrawer = new PathDrawer(this.camera);
@@ -184,6 +188,13 @@ export class App {
       case 'toggleMode':
         this.setMode(MODES[(MODES.indexOf(settings.mode) + 1) % MODES.length]);
         break;
+      case 'windsurf':
+        // Double-tap Space: only fires in walk mode
+        if (settings.mode === 'walk' && !this.walk.active) {
+          this.thirdPerson.sync();
+          if (!this.walk.triggerWindsurf()) this.hud.showToast('Cannot mount board');
+        }
+        break;
       default:
         break;
     }
@@ -208,7 +219,22 @@ export class App {
     this._mode = next;
     settings.mode = next;
 
-    if (next !== 'walk') this.walk.cancel();
+    // Purge all active effects and cancel any ride on swap
+    this.walk.cancel();
+    this.abilities.clear();
+    this.particles.reset();
+    this.decals.clear();
+    this.bursts.clear();
+    this.lights.reset();
+    this.shake.reset();
+    this.flash.reset();
+    this.pathDrawer.trail.hide();
+
+    // Follow camera only in walk mode
+    this.rig.setFollow(next === 'walk');
+    this.thirdPerson.active = next === 'walk';
+    if (next === 'walk') this.thirdPerson.sync();
+
     this.hud.setMode(next);
     if (changed) this.hud.showToast(`${MODE_META[next].hint} — ${MODE_META[next].blurb}`);
     this.editor.refresh();
@@ -290,6 +316,10 @@ export class App {
 
     this.environment.setFocus(this.character.position.x, this.character.position.z);
     this.environment.update();
+    // Third-person WASD runs before the walk ride so a ride overrides it.
+    if (settings.mode === 'walk' && !this.walk.active) {
+      this.thirdPerson.update(dt, this.input.keys);
+    }
     // Walk mode places board + rider; mixer runs next; IK plants hands/feet last.
     this.walk.update(dt);
     this.character.update(dt);
@@ -309,6 +339,8 @@ export class App {
     const focus = this.abilities.focus;
     if (focus) this.rig.lookAt(focus.position, MathUtils.clamp(1 - focus.u * 0.4, 0, 1));
     this.rig.setAnchor(this.character.position.x, 0, this.character.position.z);
+    // Follow camera tracks the character's facing yaw
+    if (this.rig.follow) this.rig.followYaw = this.character.facing;
     this.shake.update(raw);
     this.flash.update(raw);
     this.rig.update(raw);

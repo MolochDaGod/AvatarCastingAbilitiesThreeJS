@@ -105,6 +105,12 @@ export const settings = {
   /* Walk mode — leap, windsurfer board + boom IK, ride                  */
   /* ------------------------------------------------------------------ */
   walk: {
+    /* --- third-person movement (WASD / arrows) --- */
+    move: {
+      speed: 3.2, // metres/second walking speed
+      turnDamping: 0.0008 // how quickly the body rotates toward move direction
+    },
+
     /* --- the leap onto the head of the path --- */
     jumpSpeed: 7.0, // metres/second of ground covered by the leap
     jumpHeight: 1.75, // apex of the arc above the straight line
@@ -119,6 +125,7 @@ export const settings = {
     brake: 0.6, // seconds of gliding to a stop at the far end
     dismountTime: 0.55, // seconds to step off the board
     returnHome: false, // leap back to where he started once the path is ridden
+    windsurfRunLength: 6.0, // metres of straight run for double-tap-Space mount
 
     /* --- how he rides --- */
     hover: 0.06, // gap between board underside and the floor
@@ -193,7 +200,11 @@ export const settings = {
     fov: 46,
     targetHeight: 1.35,
     damping: 0.06,
-    autoFrame: 0.35 // how strongly the rig drifts toward active abilities
+    autoFrame: 0.35, // how strongly the rig drifts toward active abilities
+    // Follow-camera (walk mode): sits behind the character at this distance
+    follow: {
+      distance: 5.5
+    }
   },
 
   /* ------------------------------------------------------------------ */

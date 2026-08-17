@@ -6,16 +6,17 @@ import { LAYER } from './Layers.js';
 
 const _dir = new Vector3();
 const _desiredTarget = new Vector3();
+const _followPos = new Vector3();
 
 /**
- * Third-person orbit rig.
+ * Third-person camera rig.
  *
- * - Left mouse is reserved for drawing, so orbiting is bound to right-drag.
- * - The distance always resolves back to `settings.camera.distance`, so framing
- *   stays consistent no matter where the orbit target drifts. The wheel zooms by
- *   writing that same setting, which means zoom keeps working while the rig is
- *   following an ability, and the editor slider stays the single source of truth.
- * - The rig gently drifts its look-at point toward whatever ability is casting.
+ * Two modes:
+ *  - orbit (casting): right-drag orbits the character, wheel zooms.
+ *  - follow (walk): camera sits behind the character at a fixed offset,
+ *    turning with the character's yaw. Right-drag adds an azimuth offset.
+ *
+ * Left mouse is always reserved for path drawing.
  */
 export class CameraRig {
   constructor(domElement) {
@@ -54,9 +55,24 @@ export class CameraRig {
     // glides instead of snapping.
     this.distance = settings.camera.distance;
 
+    // Follow-mode state
+    this.follow = false;
+    this.followYaw = 0; // character yaw, set by App each frame
+    this._followAzimuth = 0; // user right-drag offset
+    this._followPolar = 0.35; // pitch offset from horizontal
+    this._rightDragging = false;
+    this._lastPointerX = 0;
+    this._lastPointerY = 0;
+
     this.domElement = domElement;
     this._onWheel = this._onWheel.bind(this);
+    this._onPointerDown = this._onPointerDown.bind(this);
+    this._onPointerMove = this._onPointerMove.bind(this);
+    this._onPointerUp = this._onPointerUp.bind(this);
     domElement.addEventListener('wheel', this._onWheel, { passive: false });
+    domElement.addEventListener('pointerdown', this._onPointerDown);
+    window.addEventListener('pointermove', this._onPointerMove);
+    window.addEventListener('pointerup', this._onPointerUp);
   }
 
   /** Wheel zoom. Multiplicative, so each notch feels the same at any distance. */
@@ -75,6 +91,28 @@ export class CameraRig {
     );
   }
 
+  // Right-drag adjusts the follow azimuth / polar offset.
+  _onPointerDown(event) {
+    if (!this.follow || event.button !== 2) return;
+    this._rightDragging = true;
+    this._lastPointerX = event.clientX;
+    this._lastPointerY = event.clientY;
+  }
+
+  _onPointerMove(event) {
+    if (!this._rightDragging) return;
+    const dx = event.clientX - this._lastPointerX;
+    const dy = event.clientY - this._lastPointerY;
+    this._lastPointerX = event.clientX;
+    this._lastPointerY = event.clientY;
+    this._followAzimuth -= dx * 0.005;
+    this._followPolar = clamp(this._followPolar + dy * 0.003, 0.05, 1.2);
+  }
+
+  _onPointerUp() {
+    this._rightDragging = false;
+  }
+
   /** Point the rig should orbit around (character position). */
   setAnchor(x, y, z) {
     this.anchor.set(x, y, z);
@@ -84,6 +122,16 @@ export class CameraRig {
   lookAt(point, weight = 1) {
     this.focus.copy(point);
     this.focusWeight = Math.max(this.focusWeight, weight);
+  }
+
+  /** Enable/disable follow-camera mode (walk mode). */
+  setFollow(enabled) {
+    this.follow = !!enabled;
+    if (this.follow) {
+      // Reset user offsets when entering follow
+      this._followAzimuth = 0;
+      this._followPolar = 0.35;
+    }
   }
 
   update(dt) {
@@ -102,14 +150,28 @@ export class CameraRig {
     _desiredTarget.y += cam.targetHeight;
     _desiredTarget.lerp(this.focus, blend);
 
-    this.controls.target.set(
-      damp(this.controls.target.x, _desiredTarget.x, cam.damping, dt),
-      damp(this.controls.target.y, _desiredTarget.y, cam.damping, dt),
-      damp(this.controls.target.z, _desiredTarget.z, cam.damping, dt)
-    );
+    if (this.follow) {
+      this._updateFollow(dt, _desiredTarget);
+    } else {
+      this._updateOrbit(dt, _desiredTarget);
+    }
 
     this.focusWeight = damp(this.focusWeight, 0, 0.08, dt);
 
+    // Camera shake is additive and applied after the controls have settled.
+    if (this.shakeOffset.lengthSq() > 0) {
+      this.camera.position.add(this.shakeOffset);
+      this.camera.rotateZ(this.shakeRoll);
+    }
+  }
+
+  _updateOrbit(dt, desiredTarget) {
+    const cam = settings.camera;
+    this.controls.target.set(
+      damp(this.controls.target.x, desiredTarget.x, cam.damping, dt),
+      damp(this.controls.target.y, desiredTarget.y, cam.damping, dt),
+      damp(this.controls.target.z, desiredTarget.z, cam.damping, dt)
+    );
     this.controls.update();
 
     // Enforce the orbit distance (zoom and the editor slider both land here).
@@ -118,12 +180,34 @@ export class CameraRig {
     const len = _dir.length() || 1;
     _dir.multiplyScalar(1 / len);
     this.camera.position.copy(this.controls.target).addScaledVector(_dir, this.distance);
+  }
 
-    // Camera shake is additive and applied after the controls have settled.
-    if (this.shakeOffset.lengthSq() > 0) {
-      this.camera.position.add(this.shakeOffset);
-      this.camera.rotateZ(this.shakeRoll);
-    }
+  _updateFollow(dt, desiredTarget) {
+    const cam = settings.camera;
+    const fcfg = settings.camera.follow;
+
+    // Ease the look-at target toward the character
+    this.controls.target.set(
+      damp(this.controls.target.x, desiredTarget.x, cam.damping, dt),
+      damp(this.controls.target.y, desiredTarget.y, cam.damping, dt),
+      damp(this.controls.target.z, desiredTarget.z, cam.damping, dt)
+    );
+
+    // Camera sits behind the character: opposite of (yaw + azimuth offset)
+    const yaw = this.followYaw + this._followAzimuth + Math.PI;
+    const polar = this._followPolar;
+    const dist = damp(this.distance, fcfg.distance, cam.zoomDamping, dt);
+    this.distance = dist;
+
+    const h = dist * Math.cos(polar);
+    const v = dist * Math.sin(polar);
+    _followPos.set(
+      this.controls.target.x + Math.sin(yaw) * h,
+      this.controls.target.y + v,
+      this.controls.target.z + Math.cos(yaw) * h
+    );
+    this.camera.position.copy(_followPos);
+    this.camera.lookAt(this.controls.target);
   }
 
   resize(width, height) {
@@ -133,6 +217,9 @@ export class CameraRig {
 
   dispose() {
     this.domElement.removeEventListener('wheel', this._onWheel);
+    this.domElement.removeEventListener('pointerdown', this._onPointerDown);
+    window.removeEventListener('pointermove', this._onPointerMove);
+    window.removeEventListener('pointerup', this._onPointerUp);
     this.controls.dispose();
   }
 }

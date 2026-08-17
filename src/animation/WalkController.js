@@ -1,4 +1,4 @@
-import { MathUtils, Vector3 } from 'three';
+import { CatmullRomCurve3, MathUtils, Vector3 } from 'three';
 import { settings } from '../config/settings.js';
 import { WindSurfer } from '../effects/WindSurfer.js';
 import { WindSurferIK } from './WindSurferIK.js';
@@ -143,6 +143,40 @@ export class WalkController {
     curve.getPointAt(0, this._target).setY(this.rideRootY);
     this._startLeap();
     return true;
+  }
+
+  /**
+   * Leap onto a windsurfer board straight ahead from the current position.
+   * Used by the double-tap-Space trigger in walk mode — no drawn path needed.
+   * The board spawns and the rider rides a short straight run forward before
+   * auto-dismounting.
+   * @returns {boolean}
+   */
+  triggerWindsurf() {
+    if (this.active) return false;
+    this.bindCharacter();
+
+    const yaw = this.character.facing;
+    const runLength = settings.walk.windsurfRunLength ?? 6.0;
+    const start = _p.copy(this.character.position);
+    start.y = 0;
+
+    // Build a short straight curve ahead of the character
+    const points = [];
+    const segs = 8;
+    for (let i = 0; i <= segs; i++) {
+      const d = (i / segs) * runLength;
+      points.push(new Vector3(
+        start.x + Math.sin(yaw) * d,
+        0,
+        start.z + Math.cos(yaw) * d
+      ));
+    }
+    const curve = new CatmullRomCurve3(points, false, 'catmullrom', 0.5);
+    curve.arcLengthDivisions = 64;
+
+    // Reuse the same begin() flow so leap/ride/dismount all work unchanged
+    return this.begin(curve);
   }
 
   cancel() {
