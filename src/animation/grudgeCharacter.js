@@ -8,6 +8,7 @@ import {
   Box3,
   MathUtils,
   QuaternionKeyframeTrack,
+  SRGBColorSpace,
   Vector3,
   VectorKeyframeTrack
 } from 'three';
@@ -400,8 +401,12 @@ export function prepareGltfMaterials(root) {
     for (const m of mats) {
       if (!m) continue;
       if (m.map) {
-        m.map.colorSpace = m.map.colorSpace || 'srgb';
+        m.map.colorSpace = SRGBColorSpace;
         m.map.needsUpdate = true;
+      }
+      if (m.emissiveMap) {
+        m.emissiveMap.colorSpace = SRGBColorSpace;
+        m.emissiveMap.needsUpdate = true;
       }
       if (m.color?.setHex) m.color.setHex(0xffffff);
       if ('metalness' in m) m.metalness = Math.min(m.metalness ?? 0, 0.15);

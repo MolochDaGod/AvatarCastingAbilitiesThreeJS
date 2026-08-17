@@ -141,6 +141,10 @@ export class CharacterController {
         }
 
         setLayerRecursive(model, LAYER.WORLD);
+        // Contact-shadow pass needs the layer enabled on every mesh too
+        model.traverse((o) => {
+          if (o.isMesh || o.isSkinnedMesh) o.layers.enable(LAYER.CONTACT);
+        });
         this.tilt.add(model);
         this.model = model;
         this.headPosition.set(0, this.height * 0.92, 0);
@@ -164,12 +168,16 @@ export class CharacterController {
             this.actions.set(name, action);
           });
           this.play([...this.actions.keys()][0], 0);
+
+          // Sample the first frame so bind-pose hip-float dies before grounding.
+          this.mixer.update(0.001);
+          reGroundAfterAnimSample(model, 0);
         }
 
-        // Re-plant after first animation sample so residual hip-float dies.
-        if (this.mixer) reGroundAfterAnimSample(model, 0);
+        // Bake the seated pose from the rig's own bones so meditation still works.
+        this.sitting = new SittingPose(model);
+        if (this.sitting.valid) this.forwardAxis.copy(this.sitting.forward);
 
-        this.sitting = null;
         console.info(`[Character] Grudge D1 loaded race=${source.race} url=${source.url}`);
         return;
       } catch (err) {
