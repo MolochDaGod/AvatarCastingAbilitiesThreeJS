@@ -15,6 +15,16 @@ import { settings } from '../config/settings.js';
 import { LAYER, setLayerRecursive } from '../core/Layers.js';
 import { disposeObject } from '../utils/dispose.js';
 import { SittingPose } from './SittingPose.js';
+import {
+  applyDefaultMageLoadout,
+  fetchFirstClip,
+  fitAndGroundFeet,
+  MAGIC_CLIPS,
+  prepareGltfMaterials,
+  reGroundAfterAnimSample,
+  rematchClipToKit,
+  stripPositionTracks
+} from './grudgeCharacter.js';
 
 const CHARACTER_URL = './models/Standing Idle.fbx';
 /** Hand-authored albedo atlas replacing the FBX's unresolvable texture refs. */
@@ -25,26 +35,36 @@ const FBX_SCALE = 0.01;
 const TARGET_HEIGHT = 1.78;
 
 /**
- * Optional Toon RTS / grudge6 race kit (SI meters already).
- * Enable with ?race=human|barbarian|elf|orc|undead|dwarf or ?toon=1
- * CDN SSOT: assets.grudge-studio.com asset-packs/toon-rts-characters
+ * Grudge Studio D1 character registry (SSOT).
+ * Docs: https://info.grudge-studio.com/docs
+ * Registry: https://api.grudge-studio.com/assets/category/character
+ * CDN: https://assets.grudge-studio.com/models/characters/<name>.glb
+ *
+ * Default character is the Mixamo-rigged human from the D1 registry.
+ * Override with ?race=<key> (grudge6 Bip001 kits) or ?kit=<url> (custom GLB).
+ * Fallback to the local FBX if the CDN is unreachable.
  */
-const TOON_RACE_URL = {
-  human: 'https://assets.grudge-studio.com/asset-packs/toon-rts-characters/glb/characters/human.glb',
-  barbarian:
-    'https://assets.grudge-studio.com/asset-packs/toon-rts-characters/glb/characters/barbarian.glb',
-  elf: 'https://assets.grudge-studio.com/asset-packs/toon-rts-characters/glb/characters/elf.glb',
-  orc: 'https://assets.grudge-studio.com/asset-packs/toon-rts-characters/glb/characters/orc.glb',
-  undead: 'https://assets.grudge-studio.com/asset-packs/toon-rts-characters/glb/characters/undead.glb',
-  dwarf: 'https://assets.grudge-studio.com/asset-packs/toon-rts-characters/glb/characters/dwarf.glb',
+const GRUDGE_CHARACTER_URL = {
+  human: 'https://assets.grudge-studio.com/models/characters/human.glb',
+  human_battle_mage_male: 'https://assets.grudge-studio.com/models/characters/human_battle_mage-male.glb',
+  human_battle_mage_female: 'https://assets.grudge-studio.com/models/characters/human_battle_mage-female.glb',
+  // grudge6 Bip001 race kits (Toon RTS)
+  barbarian: 'https://assets.grudge-studio.com/models/grudge6/brb/BRB_Characters.glb',
+  elf: 'https://assets.grudge-studio.com/models/grudge6/elf/ELF_Characters.glb',
+  orc: 'https://assets.grudge-studio.com/models/grudge6/orc/ORC_Characters.glb',
+  undead: 'https://assets.grudge-studio.com/models/grudge6/ud/UD_Characters.glb',
+  dwarf: 'https://assets.grudge-studio.com/models/grudge6/dwf/DWF_Characters.glb',
+  wraith_knight: 'https://assets.grudge-studio.com/models/grudge6/wk/WK_Characters.glb'
 };
 
 function resolveCharacterUrl() {
   try {
     const q = new URLSearchParams(window.location.search);
     const race = (q.get('race') || (q.get('toon') === '1' ? 'human' : '')).toLowerCase();
-    if (race && TOON_RACE_URL[race]) return { kind: 'gltf', url: TOON_RACE_URL[race], race };
+    if (race && GRUDGE_CHARACTER_URL[race]) return { kind: 'gltf', url: GRUDGE_CHARACTER_URL[race], race };
     if (q.get('kit')) return { kind: 'gltf', url: q.get('kit'), race: 'custom' };
+    // Default: the human character mesh from the Grudge D1 registry
+    if (!race && !q.get('fbx')) return { kind: 'gltf', url: GRUDGE_CHARACTER_URL.human, race: 'human' };
   } catch {
     /* SSR / offline */
   }
@@ -105,40 +125,55 @@ export class CharacterController {
         await assets.settled();
         const model = gltf.scene || gltf.scenes?.[0];
         if (!model) throw new Error('empty gltf');
-        // Toon RTS kits are already SI meters; fit height only.
-        model.updateMatrixWorld(true);
-        const box = new Box3().setFromObject(model);
-        const size = new Vector3();
-        box.getSize(size);
-        const h = size.y || TARGET_HEIGHT;
-        const s = TARGET_HEIGHT / h;
-        model.scale.multiplyScalar(s);
-        model.traverse((o) => {
-          if (o.isMesh || o.isSkinnedMesh) {
-            o.castShadow = true;
-            o.receiveShadow = true;
-          }
-        });
+
+        // grudge6 Bip001 kits are modular: hide weapon/shield/xtra variants,
+        // pick one body/head/arms/legs/shoulder so a single silhouette remains.
+        applyDefaultMageLoadout(model);
+
+        // Fit to uniform SI height and plant feet on y=0 using structural bones.
+        const fit = fitAndGroundFeet(model, TARGET_HEIGHT, 0);
+        this.height = fit.height;
+
+        // Prep materials for PBR lighting + shadow system.
+        prepareGltfMaterials(model);
+        for (const m of this._collectMaterials(model)) {
+          this.environment.registerShadowCaster(m);
+        }
+
         setLayerRecursive(model, LAYER.WORLD);
         this.tilt.add(model);
         this.model = model;
-        this.height = TARGET_HEIGHT;
-        this.headPosition.set(0, TARGET_HEIGHT * 0.92, 0);
-        // Prefer embedded idle if present
-        if (gltf.animations?.length) {
-          this.mixer = new AnimationMixer(model);
-          const clip = gltf.animations[0];
-          const action = this.mixer.clipAction(clip);
-          action.setLoop(LoopRepeat, Infinity);
-          action.play();
-          this.actions.set('idle', action);
-          this.current = action;
+        this.headPosition.set(0, this.height * 0.92, 0);
+
+        // Prefer embedded animations; fall back to D1 baked magic clips.
+        let clips = gltf.animations ?? [];
+        if (!clips.length) {
+          const idleClip = await fetchFirstClip(MAGIC_CLIPS.idle, 'idle');
+          if (idleClip) clips = [idleClip];
         }
+
+        if (clips.length) {
+          this.mixer = new AnimationMixer(model);
+          clips.forEach((clip, index) => {
+            const rematched = rematchClipToKit(clip, model);
+            const stripped = stripPositionTracks(rematched);
+            const name = stripped.name || (index === 0 ? 'idle' : `clip_${index}`);
+            const action = this.mixer.clipAction(stripped);
+            action.setLoop(LoopRepeat, Infinity);
+            action.clampWhenFinished = false;
+            this.actions.set(name, action);
+          });
+          this.play([...this.actions.keys()][0], 0);
+        }
+
+        // Re-plant after first animation sample so residual hip-float dies.
+        if (this.mixer) reGroundAfterAnimSample(model, 0);
+
         this.sitting = null;
-        console.info(`[Character] Toon RTS loaded race=${source.race} url=${source.url}`);
+        console.info(`[Character] Grudge D1 loaded race=${source.race} url=${source.url}`);
         return;
       } catch (err) {
-        console.warn('[Character] Toon RTS load failed, falling back to FBX', err);
+        console.warn('[Character] Grudge D1 load failed, falling back to FBX', err);
       }
     }
 
@@ -209,6 +244,17 @@ export class CharacterController {
     }
 
     return this;
+  }
+
+  /** Collect unique materials from a model for shadow caster registration. */
+  _collectMaterials(root) {
+    const mats = new Set();
+    root.traverse((o) => {
+      if (!o.isMesh && !o.isSkinnedMesh) return;
+      const m = Array.isArray(o.material) ? o.material : [o.material];
+      for (const mat of m) if (mat) mats.add(mat);
+    });
+    return mats;
   }
 
   /** Convert imported materials to PBR and hook them into the shadow system. */
