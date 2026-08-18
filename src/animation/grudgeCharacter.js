@@ -408,7 +408,7 @@ export function prepareGltfMaterials(root) {
         m.emissiveMap.colorSpace = SRGBColorSpace;
         m.emissiveMap.needsUpdate = true;
       }
-      if (m.color?.setHex) m.color.setHex(0xffffff);
+      if (!m.map && m.color?.setHex) m.color.setHex(0xffffff);
       if ('metalness' in m) m.metalness = Math.min(m.metalness ?? 0, 0.15);
       if ('roughness' in m) m.roughness = Math.max(m.roughness ?? 0.75, 0.55);
       m.needsUpdate = true;
