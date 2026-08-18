@@ -63,11 +63,10 @@ function resolveCharacterUrl() {
     const race = (q.get('race') || (q.get('toon') === '1' ? 'human' : '')).toLowerCase();
     if (race && GRUDGE_CHARACTER_URL[race]) return { kind: 'gltf', url: GRUDGE_CHARACTER_URL[race], race };
     if (q.get('kit')) return { kind: 'gltf', url: q.get('kit'), race: 'custom' };
-    // Default: the human character mesh from the Grudge D1 registry
-    if (!race && !q.get('fbx')) return { kind: 'gltf', url: GRUDGE_CHARACTER_URL.human, race: 'human' };
   } catch {
     /* SSR / offline */
   }
+  // Default: the local FBX (known-good Mixamo rig). CDN models require ?race= or ?kit=.
   return { kind: 'fbx', url: CHARACTER_URL, race: null };
 }
 
