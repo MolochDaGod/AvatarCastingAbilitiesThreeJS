@@ -601,19 +601,25 @@ export class Editor {
     const c = settings.character;
     const R = Editor.range;
 
-    // The controller polls `pose` every frame, so the dropdown needs no handler.
-    folder.add(c, 'pose', ['idle', 'sitting']).name('pose (T)');
-    R(folder, c, 'blendTime', 0.05, 3, 0.01, 'blend time');
-    R(folder, settings.global, 'animationSpeed', 0.1, 3, 0.01, 'idle speed');
+    const races = [
+      'human',
+      'human_battle_mage_male',
+      'human_battle_mage_female',
+      'barbarian',
+      'elf',
+      'orc',
+      'undead',
+      'dwarf',
+      'wraith_knight'
+    ];
 
-    // Everything below re-bakes the seated pose when it changes.
-    R(folder, c, 'breathing', 0, 3, 0.01, 'breathing');
-    R(folder, c, 'breathRate', 0.05, 1, 0.01, 'breaths / sec');
-    R(folder, c, 'legSpread', 0.6, 1.4, 0.01, 'leg spread');
-    R(folder, c, 'torsoLean', -20, 20, 0.5, 'torso lean');
-    R(folder, c, 'seatClearance', 0, 0.08, 0.002, 'seat clearance');
-    R(folder, c, 'handHeight', 0, 0.25, 0.005, 'hand height');
-    folder.add(c, 'handsOnKnees').name('hands on knees');
+    folder.add(c, 'race', races).name('race').onChange((v) => {
+      const url = new URL(window.location);
+      url.searchParams.set('race', v);
+      window.location.href = url.toString();
+    });
+
+    R(folder, settings.global, 'animationSpeed', 0.1, 3, 0.01, 'idle speed');
   }
 
   _buildWalk() {

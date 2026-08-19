@@ -179,12 +179,8 @@ export class App {
         this.paused = !this.paused;
         this.hud.showToast(this.paused ? 'Paused' : 'Resumed');
         break;
-      case 'togglePose': {
-        const pose = this.character.togglePose();
-        this.editor.refresh();
-        this.hud.showToast(pose === 'sitting' ? 'Meditation pose' : 'Standing idle');
+      case 'togglePose':
         break;
-      }
       case 'toggleMode':
         this.setMode(MODES[(MODES.indexOf(settings.mode) + 1) % MODES.length]);
         break;

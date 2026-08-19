@@ -87,18 +87,10 @@ export const settings = {
   },
 
   /* ------------------------------------------------------------------ */
-  /* Character — idle clip vs. the procedural meditation sit             */
+  /* Character                                                           */
   /* ------------------------------------------------------------------ */
   character: {
-    pose: 'idle', // 'idle' (the FBX clip) or 'sitting' (animation/SittingPose.js)
-    blendTime: 0.9, // seconds to cross-fade between the two
-    breathing: 1.0, // breath amplitude while seated (0 = perfectly still)
-    breathRate: 0.2, // breaths per second
-    legSpread: 1.0, // widens or narrows the crossed legs
-    torsoLean: 0.0, // extra forward (+) / backward (−) lean, degrees
-    seatClearance: 0.004, // gap kept between the lowest point of the body and the floor
-    handsOnKnees: true, // IK the wrists onto the knees instead of free arms
-    handHeight: 0.095 // how far above the knee joint the hands rest
+    race: 'human'
   },
 
   /* ------------------------------------------------------------------ */

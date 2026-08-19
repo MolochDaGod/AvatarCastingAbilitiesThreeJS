@@ -67,7 +67,6 @@ export class CharacterController {
     this.headPosition = new Vector3(0, 1.5, 0);
     this.forwardAxis = new Vector3(0, 0, 1);
 
-    this._poseWeight = 0;
   }
 
   /** @param {import('../loaders/AssetLoader.js').AssetLoader} assets */
@@ -156,22 +155,16 @@ export class CharacterController {
     this.current = next;
   }
 
-  /** @param {'idle'|'sitting'} pose */
-  setPose(pose) {
-    settings.character.pose = pose === 'sitting' ? 'sitting' : 'idle';
-    return settings.character.pose;
-  }
+  setPose() {}
 
-  togglePose() {
-    return this.setPose(settings.character.pose === 'sitting' ? 'idle' : 'sitting');
-  }
+  togglePose() {}
 
   get isSitting() {
-    return settings.character.pose === 'sitting';
+    return false;
   }
 
   get poseWeight() {
-    return this._poseWeight;
+    return 0;
   }
 
   setFacing(yaw) {
